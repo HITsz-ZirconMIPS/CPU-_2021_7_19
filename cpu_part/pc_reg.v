@@ -31,15 +31,18 @@ module pc_reg(
     
     input   stallreq_from_icache,
     input branch_flag,
+    input predict_flag,
+    input exception_flag,
     input[`InstAddrBus] ex_pc,
     input[`InstAddrBus] npc_actual,
     input[`InstAddrBus] epc,
-//    input[`InstAddrBus] npc_from_cache,
+    input[32:0] bpu_predict_info,
+    input       bpu_dely,
    
     
     input   ibuffer_full,
     
-    (*mark_debug = "true"*)output   reg [`InstAddrBus] pc,
+    output   reg [`InstAddrBus] pc,
     output   reg    rreq_to_icache
    
        
@@ -47,18 +50,20 @@ module pc_reg(
     );
     
     reg[`InstAddrBus]   npc;
+    reg[`InstAddrBus]   bpu_predict_info_ff ; 
     
-always@(*) begin   //组合逻辑？
-        if(rst == `RstEnable || flush == `Flush || ibuffer_full || stallreq_from_icache)begin
+    
+always@(*) begin   
+        if(rst == `RstEnable || !predict_flag || exception_flag || ibuffer_full || stallreq_from_icache)begin
             rreq_to_icache = `ChipDisable;
-        end else begin  //stall 控制
+        end else begin  
             rreq_to_icache =`ChipEnable ;
         end
 end
 
 always @(posedge clk)   pc<=npc;
     
-//逻辑要改一下    组合逻辑？  使用npc的意义是什么？ 次态 next_pc 
+
 always@(*) begin
     if(rst == `RstEnable) begin
         npc = 32'hbfc00000; //bfc00000
@@ -68,14 +73,23 @@ always@(*) begin
          npc = npc_actual;  
     end else if(flush == `Flush && flush_cause == `FailedBranchPrediction && branch_flag == `NotBranch) begin
          npc = ex_pc + 32'h8;   
-    end else if(ibuffer_full /*|| stall == 4'b0011*/|| stallreq_from_icache) npc = pc;  
-   // else if(stall == 4'b0011)  npc = npc;     
+    end else if(ibuffer_full || stallreq_from_icache) npc = pc;  
+    
     
     //bpu
+    else
+    if(bpu_predict_info[32]) begin//7.24/dqy
+        if(bpu_dely)             begin
+            npc = bpu_predict_info[31: 0]               ;
+        end
+        else         begin
+            npc = bpu_predict_info[31: 0] + 32'h00000008;
+        end
+    end
     
     else 
          npc = pc + 4'h8;
-              
+           
 end    
     
     

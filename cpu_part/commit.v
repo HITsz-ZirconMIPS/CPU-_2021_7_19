@@ -63,7 +63,10 @@ module commit(
         output  reg[2:0]                     cp0_wsel_o,
         output  reg                        cp0_we_o,
         output  reg[`RegAddrBus]             cp0_waddr_o,
-        output  reg[`RegBus]                 cp0_wdata_o
+        output  reg[`RegBus]                 cp0_wdata_o,
+        
+        input debug_time_mem_i,
+        output reg debug_time_o
        
         );
         
@@ -82,9 +85,11 @@ module commit(
             LLbit_o   <= 1'b0;
             LLbit_we_o <= `WriteDisable;
             cp0_wsel_o <= 3'b000; 
-            cp0_we_o   <= `WriteEnable;
+            cp0_we_o   <= `WriteDisable;//`WriteEnable; //!!!!!!!!!!!!
             cp0_waddr_o <= `NOPRegAddr;
             cp0_wdata_o <= `ZeroWord;
+            
+            debug_time_o <= 0;
         end else if(flush == `Flush && flush_cause == `Exception && exception_first_inst_i == 1'b1)   begin
             pc_o <= `ZeroWord;
             waddr1_o <= `NOPRegAddr;
@@ -99,9 +104,11 @@ module commit(
             LLbit_o   <= 1'b0;
             LLbit_we_o <= `WriteDisable;
             cp0_wsel_o <= 3'b000; 
-            cp0_we_o   <= `WriteEnable;
+            cp0_we_o   <= `WriteDisable;//`WriteEnable;  //!!!!!!!!!!!!!!!
             cp0_waddr_o <= `NOPRegAddr;
             cp0_wdata_o <= `ZeroWord; 
+            
+            debug_time_o <= 0;
         end else if(flush == `Flush && flush_cause == `Exception && exception_first_inst_i == 1'b0)   begin
             pc_o <= pc_i;
             waddr1_o <= waddr1_i;
@@ -116,9 +123,11 @@ module commit(
             LLbit_o   <= 1'b0;
             LLbit_we_o <= `WriteDisable;
             cp0_wsel_o <= 3'b000; 
-            cp0_we_o   <= `WriteEnable;
+            cp0_we_o   <= `WriteDisable;//`WriteEnable;   ///!!!!!!!!!!!1
             cp0_waddr_o <= `NOPRegAddr;
-            cp0_wdata_o <= `ZeroWord;     
+            cp0_wdata_o <= `ZeroWord;    
+            
+            debug_time_o <= 0; 
         end else if(stall[2] == `Stop && stall[3] == `NoStop) begin
             pc_o <= `ZeroWord;
             waddr1_o <= `NOPRegAddr;
@@ -133,9 +142,11 @@ module commit(
             LLbit_o   <= 1'b0;
             LLbit_we_o <= `WriteDisable; 
             cp0_wsel_o <= 3'b000; 
-            cp0_we_o   <= `WriteEnable;
+            cp0_we_o   <= `WriteDisable;//`WriteEnable;     ///!!!!!!!!!!!
             cp0_waddr_o <= `NOPRegAddr;
-            cp0_wdata_o <= `ZeroWord;               
+            cp0_wdata_o <= `ZeroWord;  
+            
+            debug_time_o <= 0;             
         end else if(stall[2] == `NoStop)    begin
             pc_o <= pc_i;
             waddr1_o <= waddr1_i;                                                         
@@ -153,6 +164,8 @@ module commit(
             cp0_we_o   <= cp0_we_i;
             cp0_waddr_o <= cp0_waddr_i;
             cp0_wdata_o <= cp0_wdata_i; 
+            
+            debug_time_o <= debug_time_mem_i;
             end 
     end
     

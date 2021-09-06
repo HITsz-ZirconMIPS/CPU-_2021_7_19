@@ -1,4 +1,4 @@
-`timescale 1ns / 1ps
+//`timescale 1ns / 1ps
 //////////////////////////////////////////////////////////////////////////////////
 // Company: 
 // Engineer: 
@@ -18,7 +18,7 @@
 // Additional Comments:
 // 
 //////////////////////////////////////////////////////////////////////////////////
-
+`include "defines.v"
 
 module cp0_reg(
     input  clk,
@@ -62,10 +62,11 @@ module cp0_reg(
     
     reg count0;
     reg [`InstAddrBus]  epc_i;
-    reg bd;     //延迟槽指令异常标志
+    reg bd;     //延迟槽指令异常标�?
     
-    //缩减组合逻辑延迟，将原本复杂的控制逻辑拆分成两个always模块
+    //缩减组合逻辑延迟，将原本复杂的控制�?�辑拆分成两个always模块
     always @(*) begin
+
         if(exception_first_inst_i == 1'b1 && is_in_delayslot1_i == `InDelaySlot) begin
             epc_i = inst1_addr_i - 4'h4;
             bd = 1'b1;
@@ -78,7 +79,8 @@ module cp0_reg(
         end else begin
             epc_i = inst2_addr_i;
             bd = 1'b0;    
-        end
+            end
+
    end     
     
     always @(posedge clk) begin
@@ -89,7 +91,7 @@ module cp0_reg(
             status_o <= 32'b00000000010000000000000000000000;
             cause_o <= `ZeroWord;
             epc_o <= `ZeroWord;
-            config_o <= 32'b00000000000000001000000000000000;
+            config_o <= 32'b00000000_00000000_10000000_00000000;    ////!!!!
             prid_o <= 32'b000000000010011000000000100000010;
             ebase_o <= `VECTOR_EXCEPTION;   //异常地址入口
             timer_int_o <= `InterruptNotAssert;
@@ -123,8 +125,7 @@ module cp0_reg(
                     end
                     `CP0_REG_CAUSE:begin    //���ֿ�д
                         cause_o[9:8] <= data_i[9:8];
-                       // cause_o[23] <=data_i[23];
-                        //cause_o[22] <= data_i[22];
+
                     end
                     default:;
                     
@@ -151,16 +152,16 @@ module cp0_reg(
                     cause_o[31] <= bd;
                     status_o[1] <= 1'b1;
                     cause_o[6:2] <= exception_type_i;
-                    if (inst1_addr_i[1:0] != 2'b00) badvaddr_o = inst1_addr_i;
-                    else if (inst2_addr_i[1:0] != 2'b00) badvaddr_o = inst2_addr_i;
-                    else badvaddr_o = mem_addr_i;
+                    if (inst1_addr_i[1:0] != 2'b00) badvaddr_o <= inst1_addr_i;
+                    else if (inst2_addr_i[1:0] != 2'b00) badvaddr_o <= inst2_addr_i;
+                    else badvaddr_o <= mem_addr_i;
                 end
                 `EXCEPTION_ADES: begin
                     epc_o <= epc_i;
                     cause_o[31] <= bd;
                     status_o[1] <= 1'b1;
                     cause_o[6:2] <= exception_type_i;
-                    badvaddr_o = mem_addr_i;
+                    badvaddr_o <= mem_addr_i;
                 end
                 `EXCEPTION_SYS: begin
                     epc_o <= epc_i;

@@ -18,7 +18,7 @@
 // Additional Comments:
 // 
 //////////////////////////////////////////////////////////////////////////////////
-
+`include  "defines.v" 
 
 module ctrl(
     input rst,
@@ -67,16 +67,36 @@ module ctrl(
             flush = `Noflush;
             flush_cause = `Exception;
             epc_o = `ZeroWord;
-        end else if(predict_flag == `InValidPrediction) begin     //暂时没有分支预测 所以不必暂停
-            stall = 4'b0000;
-            flush = `Flush;
-            flush_cause = `FailedBranchPrediction;
-            epc_o = `ZeroWord;            
-        end else if(stallreq_from_ex == `Stop) begin
-            stall = 4'b0011;
-            flush = `Noflush;
-            flush_cause = `Exception;
-            epc_o = `ZeroWord;    
+        end else if((predict_flag == `InValidPrediction)||(stallreq_from_ex == `Stop)) begin     //暂时没有分支预测 所以不必暂停
+              case({predict_flag,stallreq_from_ex})
+                    2'b01:begin     //all
+                             stall = 4'b0011;
+                            flush = `Flush;
+                            flush_cause = `FailedBranchPrediction;
+                            epc_o = `ZeroWord;   
+                          end
+                    2'b00:begin     //only pru
+                            stall = 4'b0000;
+                            flush = `Flush;
+                            flush_cause = `FailedBranchPrediction;
+                            epc_o = `ZeroWord;  
+                          end
+                    2'b11:begin //only Dcache
+                            stall = 4'b0011;
+                            flush = `Noflush;
+                            flush_cause = `Exception;
+                            epc_o = `ZeroWord;  
+                            
+                          end
+                    default :begin
+                            stall = 4'b0000;
+                            flush = `Noflush;
+                            flush_cause = `Exception;
+                            epc_o = `ZeroWord;
+                    end
+              endcase
+                
+   
             
         end else if(stallreq_from_id == `Stop)begin
             stall = 4'b0001;

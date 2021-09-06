@@ -4,8 +4,8 @@
 `define ZeroWord 32'h00000000
 `define WriteEnable 1'b1
 `define WriteDisable 1'b0
-`define ReadEnable 1'b1
-`define ReadDisable 1'b0
+// `define ReadEnable 1'b1
+// `define ReadDisable 1'b0
 `define AluOpBus 7:0
 `define AluSelBus 2:0
 `define InstValid 1'b0
@@ -277,7 +277,7 @@
 `define EXE_RES_SHIFT 3'b010
 `define EXE_RES_MOVE 3'b011	
 `define EXE_RES_ARITHMETIC 3'b100	
-`define EXE_RES_MUL 3'b101
+`define EXE_RES_MUL 3'b101          //可修改，用于添加新指令，但是要记得将原有的MUL指令删掉 （id和ex——main）
 `define EXE_RES_JUMP_BRANCH 3'b110
 `define EXE_RES_LOAD_STORE 3'b111	
 
@@ -287,13 +287,13 @@
 
 //ָ��洢��inst_rom
 `define InstAddrBus 31:0
-`define InstBus 31:0
+// `define InstBus 31:0
 `define InstMemNum 1024  //131071   1024
 `define InstMemNumLog2 10  //17        10 
 
 //���ݴ洢��data_ram
 `define DataAddrBus 31:0
-`define DataBus 31:0
+// `define DataBus 31:0
 `define DataMemNum 1024     //131071   1024
 `define DataMemNumLog2 10     //17        10
 `define ByteWidth 7:0
@@ -342,3 +342,49 @@
 
 //异常入口地址
 `define VECTOR_EXCEPTION   32'hBFC00380 
+
+// Signals of Interface between Cache and CPU
+//`define CPUValid              1'b1
+//`define CPUInValid            1'b0
+`define AddrSuccess           1'b1
+`define AddrFail              1'b0
+`define DataSuccess           1'b1
+`define DataFail              1'b0
+`define HitSuccess            1'b1
+`define HitFail               1'b0
+
+// Signals of Interface between Cache and AXI
+`define ReadEnable            1'b1
+`define ReadDisable           1'b0
+`define RdType_Byte           3'b000
+`define RdType_HalfWord       3'b001
+`define RdType_Word           3'b010
+`define RdType_CacheLine      3'b100
+`define RdRdyEnable           1'b1
+`define RdRdyDisable          1'b0
+`define RetVaild              1'b1
+`define RetInValid            1'b0
+`define WriteEnable           1'b1
+`define WriteDisable          1'b0
+`define WrReqEnable           1'b1
+`define WrReqDisable          1'b0
+`define WrType_Byte           3'b000
+`define WrType_HalfWord       3'b001
+`define WrType_Word           3'b010
+`define WrType_CacheLine      3'b100
+
+// Singals of BitWidth
+`define WstrbBus              3:0
+`define OffsetBus             4:0
+`define TypeBus               2:0
+`define IndexBus              6:0
+`define TagBus                19:0
+`define TagvBus               20:0
+`define DataBus               31:0
+`define AddrBus               31:0
+`define InstBus               31:0
+`define DoubleInstBus         63:0
+`define LineBus               255:0
+`define IMStateBus            6:0
+`define DMStateBus            6:0
+`define WStateBus             1:0

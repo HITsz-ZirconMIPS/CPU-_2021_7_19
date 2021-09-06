@@ -76,8 +76,8 @@ module ex_sub(
         reg[`RegBus]        moveres;
         reg[`RegBus]        arithmeticres;
         
-        wire[`DoubleRegBus]     mulres;
-        wire[`DoubleRegBus]     mulres_u;
+       // wire[`DoubleRegBus]     mulres;
+        //wire[`DoubleRegBus]     mulres_u;
        
         
         wire    ov_sum;   //保存溢出情况
@@ -90,8 +90,8 @@ module ex_sub(
         
         assign exception_type_o = {exception_type_i[31:13],ovassert,exception_type_i[11:0]};
    
-   mult_gen_0 mul(.A(reg1_i),.B(reg2_i),.P(mulres));
-   mult_gen_0_1 mul_u(.A(reg1_i),.B(reg2_i),.P(mulres_u));  //无符号乘法     
+//   mult_gen_0 mul(.A(reg1_i),.B(reg2_i),.P(mulres));
+//   mult_gen_0_1 mul_u(.A(reg1_i),.B(reg2_i),.P(mulres_u));  //无符号乘法     
    
 //        assign mem_addr_o = reg1_i+imm_i;
         
@@ -133,7 +133,8 @@ always @(*) begin
                 shiftres = reg2_i >> reg1_i[4:0];
             end
             `EXE_SRA_OP:begin        //��������
-                shiftres = ({32{reg2_i[31]}}<<(6'd32-{1'b0,reg1_i[4:0]})) | reg2_i>>reg1_i[4:0];       //bangbang ?
+//                shiftres = ({32{reg2_i[31]}}<<(6'd32-{1'b0,reg1_i[4:0]})) | reg2_i>>reg1_i[4:0];       //bangbang ?
+                  shiftres = $signed(reg2_i)  >>> reg1_i[4:0];
             end
             default: begin
                 shiftres =`ZeroWord;
@@ -196,11 +197,11 @@ assign result_sum = reg1_i +reg2_i_mux;
 assign ov_sum = ((!reg1_i[31] && !reg2_i_mux[31] && result_sum[31])
                 || (reg1_i[31] && reg2_i_mux[31] && !result_sum[31]));
 
-assign reg1_lt_reg2 = ((aluop_i == `EXE_SLT_OP) /*||
+assign reg1_lt_reg2 = ((aluop_i == `EXE_SLT_OP)) /*||
                         (aluop_i ==`EXE_TLT_OP) ||
                         (aluop_i ==`EXE_TLTI_OP)||
                         (aluop_i ==`EXE_TGE_OP) ||
-                        (aluop_i ==`EXE_TGEI_OP)*/) ?
+                        (aluop_i ==`EXE_TGEI_OP)*/ ?
                         ((reg1_i[31] && !reg2_i[31])) ||
                         (!reg1_i[31] && !reg2_i[31] && result_sum[31]) ||
                         (reg1_i[31] && reg2_i[31] && result_sum[31]) 
@@ -335,14 +336,14 @@ always @(*) begin
         whilo_o = `WriteEnable;
         hi_o = div_result_i[63:32];
         lo_o = div_result_i[31:0]; */
-    end else if (aluop_i == `EXE_MULT_OP) begin
-        whilo_o = `WriteEnable;
-        hi_o = mulres[63:32];
-        lo_o = mulres[31:0];
-    end else if(aluop_i == `EXE_MULTU_OP) begin
-        whilo_o = `WriteEnable;
-        hi_o = mulres_u[63:32];
-        lo_o = mulres_u[31:0];  
+//    end else if (aluop_i == `EXE_MULT_OP) begin
+//        whilo_o = `WriteEnable;
+//        hi_o = mulres[63:32];
+//        lo_o = mulres[31:0];
+//    end else if(aluop_i == `EXE_MULTU_OP) begin
+//        whilo_o = `WriteEnable;
+//        hi_o = mulres_u[63:32];
+//        lo_o = mulres_u[31:0];  
     end else if (aluop_i == `EXE_MTHI_OP) begin
         whilo_o = `WriteEnable;
         hi_o = reg1_i;
@@ -384,13 +385,13 @@ always @(*) begin
             ovassert = 1'b0;
             end
         end    
-        `EXE_RES_MUL: begin
-            case(aluop_i)
-                `EXE_MULT:    wdata_o = mulres[31:0];
-                `EXE_MULTU:   wdata_o = mulres_u[31:0];
-                 default:   wdata_o =`ZeroWord;
-               endcase
-         end
+//        `EXE_RES_MUL: begin
+//            case(aluop_i)
+//                `EXE_MULT:    wdata_o = mulres[31:0];
+//                `EXE_MULTU:   wdata_o = mulres_u[31:0];
+//                 default:   wdata_o =`ZeroWord;
+//               endcase
+//         end
         `EXE_RES_MOVE: begin
             wdata_o = moveres;
             case(aluop_i)

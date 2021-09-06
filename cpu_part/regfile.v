@@ -36,28 +36,32 @@ module regfile(
         //read
         input wire[`RegAddrBus] raddr1,
         output reg[`RegBus] rdata1,
-        //input wire re1,
+        
 
         input wire[`RegAddrBus] raddr2,
         output reg[`RegBus] rdata2,
-        //input wire re2,
+       
         
         input wire[`RegAddrBus] raddr3,
         output reg[`RegBus] rdata3,
-        //input wire re3,
+        
         
         input wire[`RegAddrBus] raddr4,
         output reg[`RegBus] rdata4,
-        //input wire re4
+      
                 
-        output  wire[`RegBus]   reg31     //??
+        output  wire[`RegBus]   reg31    
         
     );
     
     reg[`RegBus] regs[0:`RegNum-1] ; //寄存器需要初始化
     
-    //initial begin   $readmemb("123.txt",regs); end
     
+    integer j = 0;
+    initial
+        for(j = 0; j < 32; j = j + 1)
+            regs[j] <= 0;
+            
     
     assign reg31 = regs[31];
     

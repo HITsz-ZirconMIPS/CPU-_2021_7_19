@@ -123,7 +123,6 @@ always @(posedge clk) begin
                 end
             end 
             default:begin
-               // result_o <= {`ZeroWord,`ZeroWord};
             end 
         endcase
     end

@@ -32,9 +32,9 @@ module ex_mem(
         input[`InstAddrBus] inst1_addr_i,
         input[`InstAddrBus] inst2_addr_i,
         
-        input[`SIZE_OF_CORR_PACK]  inst1_bpu_corr_i,
-        input[`SIZE_OF_CORR_PACK]  inst2_bpu_corr_i,
         input[`SIZE_OF_BRANCH_INFO] branch_info_i,
+        input bpu_predict_flag_i,
+        input bpu_predict_true_i,
         
         input[`RegAddrBus]  waddr1_i,
         input[`RegAddrBus]  waddr2_i,
@@ -46,8 +46,10 @@ module ex_mem(
         input[`RegBus]           lo_i,
         input                              whilo_i,
         input[`AluOpBus]       aluop1_i,
+        input[`AluOpBus]       aluop2_i,
         input[`RegBus]          mem_addr_i,
         input[`RegBus]          reg2_i,
+        input[`RegBus]          reg4_i,
         input                   LLbit_i,
         input                   LLbit_we_i,
         input[2:0]              cp0_wsel_i,
@@ -60,11 +62,9 @@ module ex_mem(
         input[31:0]     exception_type1_i,
         input[31:0]     exception_type2_i,
         
-        (*mark_debug = "true"*)output  reg[`InstAddrBus]   inst1_addr_o,
+        output  reg[`InstAddrBus]   inst1_addr_o,
         output  reg[`InstAddrBus]   inst2_addr_o,
-        
-        output[`SIZE_OF_CORR_PACK]  inst1_bpu_corr_o,
-        output[`SIZE_OF_CORR_PACK]  inst2_bpu_corr_o,         
+                
         output reg[`SIZE_OF_BRANCH_INFO] branch_info_o,
         
         output  reg[`RegAddrBus]    waddr1_o,
@@ -77,8 +77,10 @@ module ex_mem(
         output  reg[`RegBus]            lo_o,
         output  reg                              whilo_o,
         output  reg[`AluOpBus]          aluop1_o,
+        output  reg[`AluOpBus]          aluop2_o,
         output  reg[`RegBus]            mem_addr_o,
         output  reg[`RegBus]            reg2_o,
+        output  reg[`RegBus]            reg4_o,
         output  reg                     LLbit_o,
         output  reg                     LLbit_we_o,
         output  reg[2:0]                cp0_wsel_o,
@@ -89,7 +91,15 @@ module ex_mem(
         output  reg                     is_in_delayslot1_o,
         output  reg                     is_in_delayslot2_o,
         output  reg[31:0]                    exception_type1_o,
-        output  reg[31:0]                    exception_type2_o
+        output  reg[31:0]                    exception_type2_o,
+        output  reg                     bpu_predict_flag_o,
+        output  reg                     bpu_predict_true_o,
+        
+        
+        input debug_time_ex_o,
+        output reg debug_time_mem_i,
+        
+        input is_jb_i
             
         );
         
@@ -107,9 +117,11 @@ module ex_mem(
                 hi_o <= `ZeroWord;
                 lo_o <= `ZeroWord;
                 whilo_o <= `WriteDisable;
-                aluop1_o <= `WriteDisable;
+                aluop1_o <= `EXE_NOP_OP;
+                aluop2_o <= `EXE_NOP_OP;
                 mem_addr_o <= `ZeroWord;
                 reg2_o <= `ZeroWord;
+                reg4_o <= `ZeroWord;
                 LLbit_o <= 1'b0;
                 LLbit_we_o <= `WriteDisable;
                 cp0_wsel_o <= 3'b000;
@@ -120,7 +132,10 @@ module ex_mem(
                 is_in_delayslot2_o <= `NotInDelaySlot;
                 exception_type1_o <= `ZeroWord;
                 exception_type2_o <= `ZeroWord;
-                
+                bpu_predict_flag_o <= 1'b1;
+                bpu_predict_true_o <= 1'b0;
+                debug_time_mem_i <= 0;
+
             end else if (flush == `Flush && flush_cause == `Exception) begin 
                 inst1_addr_o <= `ZeroWord;
                 inst2_addr_o <= `ZeroWord;
@@ -134,9 +149,11 @@ module ex_mem(
                 hi_o <= `ZeroWord;
                 lo_o <= `ZeroWord;
                 whilo_o <= `WriteDisable;
-                aluop1_o <= `WriteDisable;
+                aluop1_o <= `EXE_NOP_OP;
+                aluop2_o <= `EXE_NOP_OP;
                 mem_addr_o <= `ZeroWord;
                 reg2_o <= `ZeroWord;
+                reg4_o <= `ZeroWord;
                 LLbit_o <= 1'b0;
                 LLbit_we_o <= `WriteDisable;
                 cp0_wsel_o <= 3'b000;
@@ -147,6 +164,10 @@ module ex_mem(
                 is_in_delayslot2_o <= `NotInDelaySlot;
                 exception_type1_o <= `ZeroWord;  
                 exception_type2_o <= `ZeroWord; 
+                bpu_predict_flag_o <= 1'b1;
+                bpu_predict_true_o <= 1'b0;
+                debug_time_mem_i <= 0;
+
             end else if(stall[1] == `Stop && stall[2] == `NoStop) begin
                 inst1_addr_o <= `ZeroWord;
                 inst2_addr_o <= `ZeroWord;
@@ -161,8 +182,10 @@ module ex_mem(
                 lo_o <= `ZeroWord;
                 whilo_o <= `WriteDisable;
                 aluop1_o <= `EXE_NOP_OP;
+                aluop2_o <= `EXE_NOP_OP;
                 mem_addr_o <= `ZeroWord;
                 reg2_o <= `ZeroWord;
+                reg4_o <= `ZeroWord;
                 LLbit_o <= 1'b0;
                 LLbit_we_o <= `WriteDisable;
                 cp0_wsel_o <= 3'b000;
@@ -173,6 +196,10 @@ module ex_mem(
                 is_in_delayslot2_o <= `NotInDelaySlot;
                 exception_type1_o <= `ZeroWord;  
                 exception_type2_o <= `ZeroWord; 
+                bpu_predict_flag_o <= 1'b1;
+                bpu_predict_true_o <= 1'b0;
+                debug_time_mem_i <= 0;
+
             end else if(stall[1] == `NoStop)    begin
                 
                 inst1_addr_o <= inst1_addr_i ;
@@ -188,8 +215,10 @@ module ex_mem(
                 lo_o <= lo_i;
                 whilo_o <= whilo_i;
                 aluop1_o <= aluop1_i; 
+                aluop2_o <= aluop2_i;
                 mem_addr_o <= mem_addr_i; 
                 reg2_o <= reg2_i;
+                reg2_o <= reg4_i;
                 LLbit_o <= LLbit_i;
                 LLbit_we_o <= LLbit_we_i;
                 cp0_wsel_o <= 3'b000;
@@ -200,11 +229,12 @@ module ex_mem(
                 is_in_delayslot2_o <= is_in_delayslot2_i;
                 exception_type1_o <= exception_type1_i;  
                 exception_type2_o <= exception_type2_i; 
-                            
+                bpu_predict_flag_o <= bpu_predict_flag_i;
+                bpu_predict_true_o <= bpu_predict_true_i;           
+                            debug_time_mem_i <= debug_time_ex_o;
+
             end
        end
    
-    assign inst1_bpu_corr_o = inst1_bpu_corr_i;
-    assign inst2_bpu_corr_o = inst2_bpu_corr_i;
             
 endmodule

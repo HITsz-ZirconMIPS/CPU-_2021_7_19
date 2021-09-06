@@ -37,8 +37,10 @@ module mem(
         input[`RegBus]               lo_i,
         input                                  whilo_i,    
         input[`AluOpBus]            aluop1_i,
+        input[`AluOpBus]            aluop2_i,
         input[`RegBus]              mem_addr_i,
         input[`RegBus]              reg2_i,
+        input[`RegBus]              reg4_i,
         input                   is_in_delayslot1_i,
         input                   is_in_delayslot2_i,
         
@@ -95,7 +97,6 @@ module mem(
     reg[`RegBus]    cp0_cause;
     reg[`RegBus]    cp0_epc;
     reg[`RegBus]    cp0_ebase;
-//    reg[`RegBus]    mem_we;           //????
     reg[4:0]        exception_type1;
     reg[4:0]        exception_type2;
     reg                  exception_flag1;
@@ -241,11 +242,8 @@ module mem(
     always @(*) begin
         if(rst == `RstEnable)   begin
             waddr1_o = `NOPRegAddr;
-            waddr2_o = `NOPRegAddr;
             we1_o = `WriteDisable;
-            we2_o = `WriteDisable;
             wdata1_o = `ZeroWord;
-            wdata2_o = `ZeroWord;
             hi_o = `ZeroWord;
             lo_o = `ZeroWord;
             whilo_o = `WriteDisable;
@@ -257,11 +255,7 @@ module mem(
             cp0_wsel_o = 3'b000;
         end else begin
             waddr1_o = waddr1_i;
-            waddr2_o = waddr2_i;
             we1_o = we1_i;
-            we2_o = we2_i;
-            //wdata1_o = wdata1_i;    ////!!!!
-            wdata2_o = wdata2_i;
             hi_o = hi_i;
             lo_o = lo_i;
             whilo_o = whilo_i;
@@ -279,7 +273,7 @@ module mem(
                         2'b01:  wdata1_o = {{24{mem_data[15]}},mem_data[15:8]};
                         2'b10:  wdata1_o = {{24{mem_data[23]}},mem_data[23:16]};
                         2'b11:  wdata1_o = {{24{mem_data[31]}},mem_data[31:24]};
-                        default: ;      //??? wdata1_o = `ZeroWord;
+                        default: ;      //
                         endcase
             end
             `EXE_LBU_OP:    begin
@@ -328,8 +322,81 @@ module mem(
             
                 default:   wdata1_o = wdata1_i;
                  
-                    endcase
+                    endcase           
+                    
             end        
-end                            
+end    
+
+
+always @(*) begin
+        if(rst == `RstEnable)   begin
+            waddr2_o = `NOPRegAddr;
+            we2_o = `WriteDisable;
+            wdata2_o = `ZeroWord;
+        end else begin
+            waddr2_o = waddr2_i;
+            we2_o = we2_i;
+            wdata2_o = wdata2_i;          
+                        
+        case(aluop2_i)
+            `EXE_LB_OP: begin
+                    case(mem_addr_i[1:0])
+                        2'b00:  wdata2_o = {{24{mem_data[7]}},mem_data[7:0]};
+                        2'b01:  wdata2_o = {{24{mem_data[15]}},mem_data[15:8]};
+                        2'b10:  wdata2_o = {{24{mem_data[23]}},mem_data[23:16]};
+                        2'b11:  wdata2_o = {{24{mem_data[31]}},mem_data[31:24]};
+                        default: ;      
+                        endcase
+            end
+            `EXE_LBU_OP:    begin
+                    case(mem_addr_i[1:0])
+                        2'b00:  wdata2_o = {24'b0,mem_data[7:0]};
+                        2'b01:  wdata2_o = {24'b0,mem_data[15:8]};
+                        2'b10:  wdata2_o = {24'b0,mem_data[23:16]};
+                        2'b11:  wdata2_o = {24'b0,mem_data[31:24]};
+                        default: ;
+                        endcase
+            end                
+            `EXE_LH_OP:    begin
+                    case(mem_addr_i[1:0])
+                        2'b00:  wdata2_o = {{16{mem_data[15]}},mem_data[15:0]};
+                        2'b10:  wdata2_o = {{16{mem_data[31]}},mem_data[31:16]};
+                        default: wdata2_o = `ZeroWord;
+                        endcase
+            end       
+            `EXE_LHU_OP:    begin
+                    case(mem_addr_i[1:0])
+                        2'b00:  wdata2_o = {16'b0,mem_data[15:0]};
+                        2'b10:  wdata2_o = {16'b0,mem_data[31:16]};
+                        default: wdata2_o = `ZeroWord;
+                        endcase
+            end       
+            `EXE_LW_OP:     wdata2_o = mem_data;
+            `EXE_LWL_OP:     begin
+                    case(mem_addr_i[1:0])   
+                        2'b00:  wdata2_o = {mem_data[7:0],reg4_i[23:0]};
+                        2'b01:  wdata2_o = {mem_data[15:0],reg4_i[15:0]};
+                        2'b10:  wdata2_o = {mem_data[23:0],reg4_i[7:0]};
+                        2'b11:  wdata2_o = mem_data;
+                        default: ;
+                        endcase
+            end     
+             `EXE_LWR_OP:     begin
+                    case(mem_addr_i[1:0])   
+                        2'b00:  wdata2_o = mem_data;
+                        2'b01:  wdata2_o = {reg4_i[31:24],mem_data[31:8]};
+                        2'b10:  wdata2_o = {reg4_i[31:16],mem_data[31:16]};
+                        2'b11:  wdata2_o = {reg4_i[31:8],mem_data[31:24]};
+                        default: ;
+                        endcase
+            end 
+            `EXE_LL_OP:     wdata2_o = mem_data;
+            
+                default:   wdata2_o = wdata2_i;
+                 
+                    endcase           
+                    
+            end        
+end                        
     
 endmodule

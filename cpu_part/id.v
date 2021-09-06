@@ -42,24 +42,18 @@ module id(
     input[`RegBus]               mem_wdata1_i,
     input[`RegBus]               mem_wdata2_i,
     
-    input[`RegAddrBus]          commit_waddr1_i,
-    input[`RegAddrBus]          commit_waddr2_i,
-    input                       commit_we1_i,
-    input                       commit_we2_i,
-    input[`RegBus]               commit_wdata1_i,
-    input[`RegBus]               commit_wdata2_i,
     
     
-    //访存相关   
-    input is_load,   
-    //output reg[`RegAddrBus] reg1_addr_o,
-    //output reg[`RegAddrBus] reg2_addr_o,
+    //访存相关    
+    input is_load1,   
+    input is_load2,
 
     output reg is_div,  //是否为除法指令
     output reg is_mul,
     output reg is_jb,
     output reg is_ls,
     output reg is_cp0,
+    
    
     output reg[`AluOpBus]   aluop_o, 
     output reg[`AluSelBus]  alusel_o,
@@ -80,7 +74,8 @@ module id(
     output[`RegBus]         imm_fnl_o ,
     output[31:0]            exception_type,
         
-    output                  load_dependency    
+    output                  load_dependency ,
+    output reg[31:0]           bru_addr    
     );
     
     
@@ -93,6 +88,8 @@ module id(
     wire [4:0]   shamt = inst_i[10:6];
     wire [5:0]   funct = inst_i[5:0];
     wire [15:0]  imm = inst_i[15:0];
+    
+      wire [`InstAddrBus] pc_4 = pc_i + 4;
     
     
     reg[`RegBus]    imm_ex;
@@ -129,12 +126,13 @@ module id(
             is_jb = 1'b0;
             is_ls = 1'b0;
             is_cp0 =1'b0;
+//            is_new = 1'b0;
             cp0_sel_o = 3'b000;
             cp0_addr_o = 5'b00000;
             syscall_exception = 1'b0;
             eret_exception = 1'b0;
             break_exception = 1'b0;
-                        
+//            fliter_rst = 1'b0;            
         end else begin    
             aluop_o = `EXE_NOP_OP;
             alusel_o = `EXE_RES_NOP;
@@ -161,6 +159,7 @@ module id(
             break_exception = 1'b0;
 
         case(op)
+
             `EXE_SPECIAL_INST:  begin
                 if(shamt == 5'b00000)begin
                     case(funct)
@@ -340,6 +339,7 @@ module id(
                                 reg2_read_o = `ReadEnable;
                                 instvalid = `InstValid;
                                 is_mul = 1'b1;
+                                hilo_we = `ReadEnable;
                              end
                              `EXE_MULTU: begin   
                                 we_o = `WriteEnable;
@@ -348,6 +348,7 @@ module id(
                                 reg2_read_o = `ReadEnable;
                                 instvalid = `InstValid;
                                 is_mul = 1'b1;
+                                hilo_we = `ReadEnable;
                              end
                             
                             `EXE_DIV: begin
@@ -956,6 +957,24 @@ module id(
                         reg2_read_o =1'b0;
                         instvalid =`InstValid;
                     end */
+                    
+//                    6'b110111: begin
+//                        if((rt == 5'b00000) && (shamt == 5'b11100)) begin
+//                            we_o = `WriteEnable;
+//                            waddr_o = rd;
+//                            aluop_o = 8'b11111111;
+//                            alusel_o = `EXE_RES_ARITHMETIC;
+//                            reg1_read_o = 1'b1;
+//                            reg2_read_o = 1'b0;
+//                            instvalid = `InstValid;
+////                            is_new  = 1'b1;
+//                            if((rs == 5'b00000) && (rd == 5'b00000)) begin
+//                                fliter_rst = 1'b1;
+//                            end else  fliter_rst = 1'b0;                                
+//                        end
+//                        else ;
+                        
+                    
                     `EXE_MUL:begin           //ֻ�������ĵ�32λ
                         we_o = `WriteEnable;
                         aluop_o =`EXE_MUL_OP;
@@ -1020,17 +1039,16 @@ always@(*)  begin
     if(rst == `RstEnable)   begin
         reg1_o = `ZeroWord;    
     // solve the problem of data correlation(hazard)       
-    end else if(reg1_read_o == `ReadEnable && is_load && ex_waddr1_i == reg1_raddr_o)  begin  
-        reg1_load_dependency = `LoadDependent;   
-      //  reg1_o = reg1_data_i;                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
+  end else if(reg1_read_o == `ReadEnable && ((is_load1&&(ex_waddr1_i == reg1_raddr_o)) || (is_load2&&(ex_waddr2_i == reg1_raddr_o)) ))  begin 
+        reg1_load_dependency = `LoadDependent;                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
     end else if(reg1_read_o == `ReadEnable && ex_we2_i == `WriteEnable && ex_waddr2_i == reg1_raddr_o)  begin
         reg1_o = ex_wdata2_i;
     end else if(reg1_read_o == `ReadEnable && ex_we1_i == `WriteEnable && ex_waddr1_i == reg1_raddr_o) begin
         reg1_o = ex_wdata1_i;
     end else if(reg1_read_o ==  `ReadEnable && mem_we2_i == `WriteEnable && mem_waddr2_i == reg1_raddr_o)   begin
-        reg1_o = mem_wdata2_i;
+        reg1_o = mem_wdata2_i;                          
     end else if(reg1_read_o == `ReadEnable && mem_we1_i == `WriteEnable && mem_waddr1_i == reg1_raddr_o)    begin
-        reg1_o = mem_wdata1_i;            
+        reg1_o = mem_wdata1_i;                                
        
     end else if(reg1_read_o == `ReadEnable) begin
         reg1_o = reg1_data_i;           //regfile 
@@ -1047,9 +1065,8 @@ always@(*)  begin
     if(rst == `RstEnable)   begin
         reg2_o = `ZeroWord;
      // solve the problem of data correlation
-    end else if(reg2_read_o == `ReadEnable && is_load && ex_waddr1_i == reg2_raddr_o)  begin  
-        reg2_load_dependency = `LoadDependent; 
-        //reg2_o = reg2_data_i;  
+    end else if(reg2_read_o == `ReadEnable &&(( is_load1 && ex_waddr1_i == reg2_raddr_o )||( is_load2 &&ex_waddr2_i == reg2_raddr_o)))  begin   
+        reg2_load_dependency = `LoadDependent;  
     end else if(reg2_read_o == `ReadEnable && ex_we2_i == `WriteEnable && ex_waddr2_i == reg2_raddr_o)  begin
         reg2_o = ex_wdata2_i;
     end else if(reg2_read_o == `ReadEnable && ex_we1_i == `WriteEnable && ex_waddr1_i == reg2_raddr_o) begin
@@ -1069,5 +1086,21 @@ always@(*)  begin
 end   
 
 assign imm_fnl_o = imm_ex;
+
+always @(*)begin
+    case(op[2:0])
+    3'b011,3'b010: begin //J,jal
+         bru_addr = {pc_4[31:28],imm_ex[27:0]}; 
+    end
+    3'b000:begin    //JR JAL
+         bru_addr = reg1_o;
+    end
+   default:begin
+         bru_addr =  pc_4 + imm_ex;
+   end
+endcase
+end
+
+
                 
 endmodule

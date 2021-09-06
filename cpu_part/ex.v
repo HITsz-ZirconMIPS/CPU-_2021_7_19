@@ -23,7 +23,7 @@
 module ex(
         input       rst,
        
-        
+        input[32:0]                 bpu_predict_info_i,
         input[`AluOpBus]             aluop_i,
         input[`AluSelBus]             alusel_i,
         input[`RegBus]                  reg1_i,
@@ -35,11 +35,13 @@ module ex(
         input[`RegBus]          lo_i,
 
         input[`DoubleRegBus]    div_result_i,
-        input                                    div_ready_i,
+        input                   div_ready_i,
+        input[`DoubleRegBus]    mult_result_i,
+        input                   mult_ready_i    ,
         
         input[`RegBus]                  imm_i,
         input[`InstAddrBus]             pc_i,
-        input[`SIZE_OF_CORR_PACK]       inst_bpu_corr_i,
+     //   input[`SIZE_OF_CORR_PACK]       inst_bpu_corr_i,
         input                        LLbit_i,
         
         input[2:0]               cp0_sel_i,
@@ -69,11 +71,16 @@ module ex(
         output  reg                               div_start_o,
         output  reg                               signed_div_o,
         
+        output  reg[`RegBus]            mult_opdata1_o,
+        output  reg[`RegBus]            mult_opdata2_o,
+        output  reg                     mult_start_o,
+        output  reg                     signed_mult_o,
+        
         output  reg[`InstAddrBus]       npc_actual,
         output reg                      branch_flag_actual,
         output reg                      predict_flag,
         output reg[`SIZE_OF_BRANCH_INFO]    branch_info,
-        output  wire                    predict_true,
+        output  reg                    predict_true,
         
         output[`RegBus]                    mem_addr_o,
         
@@ -93,12 +100,15 @@ module ex(
         output  reg[`RegBus]                    cp0_wdata_o,
         
         output[31:0]                            exception_type_o,
+        output  reg                                 lb_type,
+        
+        input [`RegBus] bru_addr,
         
         output                                       stallreq 
          
     );
         
-        assign inst_bpu_corr_i = {`NotBranch,87'b0};
+      //  assign inst_bpu_corr_i = {`NotBranch,87'b0};
         
         reg[`RegBus]        logicout;
         reg[`RegBus]        shiftres;
@@ -108,8 +118,8 @@ module ex(
         reg[`RegBus]        scres;
      //   reg[`InstAddrBus]   jbaddr;
         
-        wire[`DoubleRegBus]     mulres;
-        wire[`DoubleRegBus]     mulres_u;  //无符号乘法结果
+      //  wire[`DoubleRegBus]     mulres;
+        //wire[`DoubleRegBus]     mulres_u;  //无符号乘法结果
   
         
         wire    ov_sum;   //保存溢出情况 加法溢出
@@ -118,6 +128,7 @@ module ex(
         
         reg stallreq_for_div;    
         reg stallreq_for_mfc0;
+        reg stallreq_for_mult;
         
         reg trapassert;  //自陷异常
         reg ovassert;    //溢出异常
@@ -132,10 +143,10 @@ module ex(
         wire reg1_lt_reg2;
         
               
-     mult_gen_0 mul(.A(reg1_i),.B(reg2_i),.P(mulres));  //有符号乘法
-     mult_gen_0_1 mul_u(.A(reg1_i),.B(reg2_i),.P(mulres_u));  //无符号乘法
+//     mult_gen_0 mul(.A(reg1_i),.B(reg2_i),.P(mulres));  //有符号乘法
+//     mult_gen_0_1 mul_u(.A(reg1_i),.B(reg2_i),.P(mulres_u));  //无符号乘法
         
-        assign stallreq = stallreq_for_div|stallreq_for_mfc0 ; //⛵还有异常相关指令需要添加
+        assign stallreq = stallreq_for_div|stallreq_for_mfc0|stallreq_for_mult ; //⛵还有异常相关指令需要添加
         assign mem_addr_o = reg1_i+imm_i;
         
         assign exception_type_o = {exception_type_i[31:14],trapassert,ovassert,exception_type_i[11:6],ades_exception,adel_exception | exception_type_i[4],exception_type_i[3:0]};
@@ -412,11 +423,53 @@ always @(*) begin
         endcase
     end
 end
+
+always @(*) begin
+  if(rst) begin
+    stallreq_for_mult = `NoStop;
+    mult_opdata1_o = `ZeroWord;
+    mult_opdata2_o = `ZeroWord;
+    mult_start_o = 1'b0;      
+    signed_mult_o = 1'b0;
+  end else begin
+    stallreq_for_mult = `NoStop;
+    mult_opdata1_o = `ZeroWord;
+    mult_opdata2_o = `ZeroWord;
+    mult_start_o = 1'b0;
+    signed_mult_o = 1'b0;  
+    case(aluop_i)
+        `EXE_MUL_OP,`EXE_MULT_OP: begin
+            mult_opdata1_o = reg1_i;  
+            mult_opdata2_o = reg2_i;  
+            mult_start_o = 1'b1;         
+            signed_mult_o = 1'b1;         
+            if(~mult_ready_i) begin     
+                stallreq_for_mult = `Stop;
+            end else  begin   
+                stallreq_for_mult = `NoStop; 
+            end
+         end    
+         `EXE_MULTU_OP:  begin
+             mult_opdata1_o = reg1_i;  
+             mult_opdata2_o = reg2_i;  
+             mult_start_o = 1'b1;         
+             signed_mult_o = 1'b0;            
+             if(~mult_ready_i) begin                       
+                stallreq_for_mult = `Stop;
+             end else  begin   
+                stallreq_for_mult = `NoStop; 
+            end
+         end    
+         default: begin
+         end   
+         endcase   
+      end      
+ end           
    
    assign pc_4 = pc_i + 4;  //符合openmips的虚拟地址设计，后面要改回来！！！！ 
    assign pc_8 = pc_i + 8;
    
-    assign perdict_true = predict_flag == `ValidPrediction;
+    //assign perdict_true = predict_flag == `ValidPrediction;
    
    always@ (*) begin
     if(rst == `RstEnable) begin
@@ -429,99 +482,132 @@ end
         case(aluop_i)
             `EXE_J_OP: begin
                 branch_flag_actual = `Branch;
-                npc_actual = {pc_4[31:28],imm_i[27:0]};
+//                npc_actual = {pc_4[31:28],imm_i[27:0]};
+                npc_actual = bru_addr;
                 //npc_actual = pc_4;
-                predict_flag = inst_bpu_corr_i[`CRR_PRED_DIR] == `Branch && inst_bpu_corr_i[`CRR_PRED_TAR] == npc_actual ? `ValidPrediction : `InValidPrediction;
-                branch_info = {pc_i,branch_flag_actual,npc_actual,`BTYPE_CAL};
+                predict_flag = bpu_predict_info_i[32] == `Branch && bpu_predict_info_i[31:0] == bru_addr ? `ValidPrediction : `InValidPrediction;
+                branch_info = {pc_i,branch_flag_actual,bru_addr,`BTYPE_CAL};
+                predict_true = bpu_predict_info_i[32] == `Branch && bpu_predict_info_i[31:0] == bru_addr ? `ValidPrediction : `InValidPrediction;
              end         
             `EXE_JAL_OP: begin
                 branch_flag_actual = `Branch;
-               npc_actual = {pc_4[31:28],imm_i[27:0]};
+//               npc_actual = {pc_4[31:28],imm_i[27:0]};
+npc_actual = bru_addr;
                // npc_actual = pc_4;
-                predict_flag = inst_bpu_corr_i[`CRR_PRED_DIR] == `Branch && inst_bpu_corr_i[`CRR_PRED_TAR] == npc_actual ? `ValidPrediction : `InValidPrediction;
-                branch_info = {pc_i,branch_flag_actual,npc_actual,`BTYPE_CAL};
+                predict_flag = bpu_predict_info_i[32] == `Branch && bpu_predict_info_i[31:0] == bru_addr ? `ValidPrediction : `InValidPrediction;
+                branch_info = {pc_i,branch_flag_actual,bru_addr,`BTYPE_CAL};
+                predict_true = bpu_predict_info_i[32] == `Branch && bpu_predict_info_i[31:0] == bru_addr ? `ValidPrediction : `InValidPrediction;
              end   
             `EXE_JR_OP: begin
                 branch_flag_actual = `Branch;
-                npc_actual = reg1_i;
-                predict_flag = inst_bpu_corr_i[`CRR_PRED_DIR] == `Branch && inst_bpu_corr_i[`CRR_PRED_TAR] == npc_actual ? `ValidPrediction : `InValidPrediction;
-                branch_info = {pc_i,branch_flag_actual,npc_actual,`BTYPE_RET};
+//                npc_actual = reg1_i;
+npc_actual = bru_addr;
+                predict_flag = bpu_predict_info_i[32] == `Branch && bpu_predict_info_i[31:0] == bru_addr ? `ValidPrediction : `InValidPrediction;
+                branch_info = {pc_i,branch_flag_actual,bru_addr,`BTYPE_RET};
+                predict_true = bpu_predict_info_i[32] == `Branch && bpu_predict_info_i[31:0] == bru_addr ? `ValidPrediction : `InValidPrediction;
              end 
             `EXE_JALR_OP: begin
                 branch_flag_actual = `Branch;
-                npc_actual = reg1_i;
-                predict_flag = inst_bpu_corr_i[`CRR_PRED_DIR] == `Branch && inst_bpu_corr_i[`CRR_PRED_TAR] == npc_actual ? `ValidPrediction : `InValidPrediction;
-                branch_info = {pc_i,branch_flag_actual,npc_actual,`BTYPE_CAL};
+//                npc_actual = reg1_i;
+npc_actual = bru_addr;
+                predict_flag = bpu_predict_info_i[32] == `Branch && bpu_predict_info_i[31:0] == bru_addr ? `ValidPrediction : `InValidPrediction;
+                branch_info = {pc_i,branch_flag_actual,bru_addr,`BTYPE_CAL};
+                predict_true = bpu_predict_info_i[32] == `Branch && bpu_predict_info_i[31:0] == bru_addr ? `ValidPrediction : `InValidPrediction;
              end 
             `EXE_BEQ_OP: begin
                 branch_flag_actual = (reg1_i == reg2_i) ? `Branch : `NotBranch;
-                npc_actual = pc_4 + imm_i;
+//                npc_actual = pc_4 + imm_i;
+npc_actual = bru_addr;
                // npc_actual = pc_4;
-                predict_flag = inst_bpu_corr_i[`CRR_PRED_DIR] == `Branch && branch_flag_actual == `Branch && inst_bpu_corr_i[`CRR_PRED_TAR] == npc_actual ||
-                                inst_bpu_corr_i[`CRR_PRED_DIR] == `NotBranch && branch_flag_actual == `NotBranch ? `ValidPrediction : `InValidPrediction;
-                branch_info = {pc_i,branch_flag_actual,npc_actual,`BTYPE_NUL};                
+                predict_flag = bpu_predict_info_i[32] == `Branch && branch_flag_actual == `Branch && bpu_predict_info_i[31:0] == bru_addr ||
+                                bpu_predict_info_i[32] == `NotBranch && branch_flag_actual == `NotBranch ? `ValidPrediction : `InValidPrediction;
+                branch_info = {pc_i,branch_flag_actual,bru_addr,`BTYPE_NUL};       
+                predict_true = bpu_predict_info_i[32] == `Branch && branch_flag_actual == `Branch && bpu_predict_info_i[31:0] == bru_addr ||
+                                bpu_predict_info_i[32] == `NotBranch && branch_flag_actual == `NotBranch ? `ValidPrediction : `InValidPrediction;  
              end
              `EXE_BGTZ_OP: begin
                 branch_flag_actual = (reg1_i[31] == 1'b0)&&(reg1_i != 32'b0) ? `Branch : `NotBranch;
-                npc_actual = pc_4 + imm_i;
+//                npc_actual = pc_4 + imm_i;
+npc_actual = bru_addr;
                 //npc_actual = pc_4;
-                predict_flag = inst_bpu_corr_i[`CRR_PRED_DIR] == `Branch && branch_flag_actual == `Branch && inst_bpu_corr_i[`CRR_PRED_TAR] == npc_actual ||
-                                inst_bpu_corr_i[`CRR_PRED_DIR] == `NotBranch && branch_flag_actual == `NotBranch ? `ValidPrediction : `InValidPrediction;
-                branch_info = {pc_i,branch_flag_actual,npc_actual,`BTYPE_NUL};                
+                predict_flag = bpu_predict_info_i[32] == `Branch && branch_flag_actual == `Branch && bpu_predict_info_i[31:0] == bru_addr ||
+                                bpu_predict_info_i[32] == `NotBranch && branch_flag_actual == `NotBranch ? `ValidPrediction : `InValidPrediction;
+                branch_info = {pc_i,branch_flag_actual,bru_addr,`BTYPE_NUL};  
+                predict_true = bpu_predict_info_i[32] == `Branch && branch_flag_actual == `Branch && bpu_predict_info_i[31:0] == bru_addr ||
+                                bpu_predict_info_i[32] == `NotBranch && branch_flag_actual == `NotBranch ? `ValidPrediction : `InValidPrediction;     
              end
              `EXE_BLEZ_OP: begin
                 branch_flag_actual = (reg1_i[31] == 1'b1)||(reg1_i == 32'b0) ? `Branch : `NotBranch;
-                npc_actual = pc_4 + imm_i;
+//                npc_actual = pc_4 + imm_i;
+npc_actual = bru_addr;
                 //npc_actual = pc_4;
-                predict_flag = inst_bpu_corr_i[`CRR_PRED_DIR] == `Branch && branch_flag_actual == `Branch && inst_bpu_corr_i[`CRR_PRED_TAR] == npc_actual ||
-                                inst_bpu_corr_i[`CRR_PRED_DIR] == `NotBranch && branch_flag_actual == `NotBranch ? `ValidPrediction : `InValidPrediction;
-                branch_info = {pc_i,branch_flag_actual,npc_actual,`BTYPE_NUL};                
+                predict_flag = bpu_predict_info_i[32] == `Branch && branch_flag_actual == `Branch && bpu_predict_info_i[31:0] == bru_addr ||
+                                bpu_predict_info_i[32] == `NotBranch && branch_flag_actual == `NotBranch ? `ValidPrediction : `InValidPrediction;
+                branch_info = {pc_i,branch_flag_actual,bru_addr,`BTYPE_NUL};                
+                predict_true = bpu_predict_info_i[32] == `Branch && branch_flag_actual == `Branch && bpu_predict_info_i[31:0] == bru_addr ||
+                                bpu_predict_info_i[32] == `NotBranch && branch_flag_actual == `NotBranch ? `ValidPrediction : `InValidPrediction;       
              end
              `EXE_BNE_OP: begin
                 branch_flag_actual = (reg1_i != reg2_i) ? `Branch : `NotBranch;
-                npc_actual = pc_4 + imm_i;
+//                npc_actual = pc_4 + imm_i;
+npc_actual = bru_addr;
                 //npc_actual = pc_4;
-                predict_flag = inst_bpu_corr_i[`CRR_PRED_DIR] == `Branch && branch_flag_actual == `Branch && inst_bpu_corr_i[`CRR_PRED_TAR] == npc_actual ||
-                                inst_bpu_corr_i[`CRR_PRED_DIR] == `NotBranch && branch_flag_actual == `NotBranch ? `ValidPrediction : `InValidPrediction;
-                branch_info = {pc_i,branch_flag_actual,npc_actual,`BTYPE_NUL}; 
+                predict_flag = bpu_predict_info_i[32] == `Branch && branch_flag_actual == `Branch && bpu_predict_info_i[31:0] == bru_addr ||
+                                bpu_predict_info_i[32] == `NotBranch && branch_flag_actual == `NotBranch ? `ValidPrediction : `InValidPrediction;
+                branch_info = {pc_i,branch_flag_actual,bru_addr,`BTYPE_NUL}; 
+                predict_true = bpu_predict_info_i[32] == `Branch && branch_flag_actual == `Branch && bpu_predict_info_i[31:0] == bru_addr ||
+                                bpu_predict_info_i[32] == `NotBranch && branch_flag_actual == `NotBranch ? `ValidPrediction : `InValidPrediction;
              end
              `EXE_BGEZ_OP: begin
                 branch_flag_actual = (reg1_i[31] == 1'b0) ? `Branch : `NotBranch;
-                npc_actual = pc_4 + imm_i;
+//                npc_actual = pc_4 + imm_i;
+npc_actual = bru_addr;
                 //npc_actual = pc_4;
-                predict_flag = inst_bpu_corr_i[`CRR_PRED_DIR] == `Branch && branch_flag_actual == `Branch && inst_bpu_corr_i[`CRR_PRED_TAR] == npc_actual ||
-                                inst_bpu_corr_i[`CRR_PRED_DIR] == `NotBranch && branch_flag_actual == `NotBranch ? `ValidPrediction : `InValidPrediction;
-                branch_info = {pc_i,branch_flag_actual,npc_actual,`BTYPE_NUL};                
+                predict_flag = bpu_predict_info_i[32] == `Branch && branch_flag_actual == `Branch && bpu_predict_info_i[31:0] == bru_addr ||
+                                bpu_predict_info_i[32] == `NotBranch && branch_flag_actual == `NotBranch ? `ValidPrediction : `InValidPrediction;
+                branch_info = {pc_i,branch_flag_actual,bru_addr,`BTYPE_NUL};      
+                predict_true = bpu_predict_info_i[32] == `Branch && branch_flag_actual == `Branch && bpu_predict_info_i[31:0] == bru_addr ||
+                                bpu_predict_info_i[32] == `NotBranch && branch_flag_actual == `NotBranch ? `ValidPrediction : `InValidPrediction;          
              end
              `EXE_BGEZAL_OP: begin
                 branch_flag_actual = (reg1_i[31] == 1'b0) ? `Branch : `NotBranch;
-                npc_actual = pc_4 + imm_i;
+//                npc_actual = pc_4 + imm_i;
+npc_actual = bru_addr;
                 //npc_actual = pc_4;
-                predict_flag = inst_bpu_corr_i[`CRR_PRED_DIR] == `Branch && branch_flag_actual == `Branch && inst_bpu_corr_i[`CRR_PRED_TAR] == npc_actual ||
-                                inst_bpu_corr_i[`CRR_PRED_DIR] == `NotBranch && branch_flag_actual == `NotBranch ? `ValidPrediction : `InValidPrediction;
-                branch_info = {pc_i,branch_flag_actual,npc_actual,`BTYPE_CAL};                
+                predict_flag = bpu_predict_info_i[32] == `Branch && branch_flag_actual == `Branch && bpu_predict_info_i[31:0] == bru_addr ||
+                                bpu_predict_info_i[32] == `NotBranch && branch_flag_actual == `NotBranch ? `ValidPrediction : `InValidPrediction;
+                branch_info = {pc_i,branch_flag_actual,bru_addr,`BTYPE_CAL};                
+                predict_true = bpu_predict_info_i[32] == `Branch && branch_flag_actual == `Branch && bpu_predict_info_i[31:0] == bru_addr ||
+                                bpu_predict_info_i[32] == `NotBranch && branch_flag_actual == `NotBranch ? `ValidPrediction : `InValidPrediction;
              end 
              `EXE_BLTZ_OP: begin
                 branch_flag_actual = (reg1_i[31] == 1'b1) ? `Branch : `NotBranch;
-                npc_actual = pc_4 + imm_i;
+//                npc_actual = pc_4 + imm_i;
+npc_actual = bru_addr;
                 //npc_actual = pc_4;
-                predict_flag = inst_bpu_corr_i[`CRR_PRED_DIR] == `Branch && branch_flag_actual == `Branch && inst_bpu_corr_i[`CRR_PRED_TAR] == npc_actual ||
-                                inst_bpu_corr_i[`CRR_PRED_DIR] == `NotBranch && branch_flag_actual == `NotBranch ? `ValidPrediction : `InValidPrediction;
-                branch_info = {pc_i,branch_flag_actual,npc_actual,`BTYPE_NUL};                
+                predict_flag = bpu_predict_info_i[32] == `Branch && branch_flag_actual == `Branch && bpu_predict_info_i[31:0] == bru_addr ||
+                                bpu_predict_info_i[32] == `NotBranch && branch_flag_actual == `NotBranch ? `ValidPrediction : `InValidPrediction;
+                branch_info = {pc_i,branch_flag_actual,bru_addr,`BTYPE_NUL};    
+                predict_true = bpu_predict_info_i[32] == `Branch && branch_flag_actual == `Branch && bpu_predict_info_i[31:0] == bru_addr ||
+                                bpu_predict_info_i[32] == `NotBranch && branch_flag_actual == `NotBranch ? `ValidPrediction : `InValidPrediction;                         
              end  
              `EXE_BLTZAL_OP: begin
                 branch_flag_actual = (reg1_i[31] == 1'b1) ? `Branch : `NotBranch;
-                npc_actual = pc_4 + imm_i;
+//                npc_actual = pc_4 + imm_i;
+npc_actual = bru_addr;
                 //npc_actual = pc_4;
-                predict_flag = inst_bpu_corr_i[`CRR_PRED_DIR] == `Branch && branch_flag_actual == `Branch && inst_bpu_corr_i[`CRR_PRED_TAR] == npc_actual ||
-                                inst_bpu_corr_i[`CRR_PRED_DIR] == `NotBranch && branch_flag_actual == `NotBranch ? `ValidPrediction : `InValidPrediction;
-                branch_info = {pc_i,branch_flag_actual,npc_actual,`BTYPE_CAL};                
+                predict_flag = bpu_predict_info_i[32] == `Branch && branch_flag_actual == `Branch && bpu_predict_info_i[31:0] == bru_addr ||
+                                bpu_predict_info_i[32] == `NotBranch && branch_flag_actual == `NotBranch ? `ValidPrediction : `InValidPrediction;
+                branch_info = {pc_i,branch_flag_actual,bru_addr,`BTYPE_CAL};                
+                predict_true = bpu_predict_info_i[32] == `Branch && branch_flag_actual == `Branch && bpu_predict_info_i[31:0] == bru_addr ||
+                                bpu_predict_info_i[32] == `NotBranch && branch_flag_actual == `NotBranch ? `ValidPrediction : `InValidPrediction;
              end  
              default: begin
-                npc_actual = `ZeroWord;
+                 npc_actual = `ZeroWord;
                 branch_flag_actual = `NotBranch;
-                predict_flag = `ValidPrediction;
-                branch_info = {`ZeroWord,`NotBranch,`ZeroWord,2'b00};                     
+                predict_flag = ~bpu_predict_info_i[32];//7.26_dqy   ??
+                branch_info = {`ZeroWord,`NotBranch,`ZeroWord,2'b00};  
+                predict_true = 1'b0;                
             end
           endcase  
          end
@@ -548,6 +634,7 @@ end
             LLbit_we_o = `WriteDisable;
             adel_exception = 1'b0;
             ades_exception = 1'b0;
+            lb_type = 1'b0;
         end else begin
             mem_raddr_o = `ZeroWord;
             mem_waddr_o = `ZeroWord;
@@ -560,11 +647,13 @@ end
             LLbit_we_o = `WriteDisable;
             adel_exception = 1'b0;
             ades_exception = 1'b0;
+            lb_type = 1'b0;
             case (aluop_i)
             `EXE_LB_OP: begin
                 mem_raddr_o = mem_addr_o;
                 mem_we = `WriteDisable;
                 mem_re = `ReadEnable;
+                lb_type = 1'b1;
                /* case (mem_addr_o[1:0])
                     2'b00: mem_sel_o = 4'b0001;
                     2'b01: mem_sel_o = 4'b0010;
@@ -577,6 +666,7 @@ end
                 mem_raddr_o = mem_addr_o;
                 mem_we = `WriteDisable;
                 mem_re = `ReadEnable;
+                lb_type = 1'b1;
                /* case (mem_addr_o[1:0])
                     2'b00: mem_sel_o = 4'b0001;
                     2'b01: mem_sel_o = 4'b0010;
@@ -745,14 +835,14 @@ always @(*) begin
         whilo_o = `WriteEnable;
         hi_o = div_result_i[63:32];
         lo_o = div_result_i[31:0];
-    end else if (aluop_i == `EXE_MULT_OP) begin
+    end else if ((aluop_i == `EXE_MULT_OP) || (aluop_i == `EXE_MULTU_OP)) begin
         whilo_o = `WriteEnable;
-        hi_o = mulres[63:32];
-        lo_o = mulres[31:0];
-    end else if(aluop_i == `EXE_MULTU_OP) begin
+        hi_o = mult_result_i[63:32];
+        lo_o = mult_result_i[31:0];
+    end else if(aluop_i == `EXE_MUL_OP) begin
         whilo_o = `WriteEnable;
-        hi_o = mulres_u[63:32];
-        lo_o = mulres_u[31:0];    
+        hi_o = `ZeroWord;
+        lo_o = mult_result_i[31:0];  
     end else if (aluop_i == `EXE_MTHI_OP) begin
         whilo_o = `WriteEnable;
         hi_o = reg1_i;
@@ -809,13 +899,13 @@ always @(*) begin
                 ovassert = 1'b0;
             end
         end
-        `EXE_RES_MUL: begin
-            case(aluop_i)
-                `EXE_MULT:    wdata_o = mulres[31:0];
-                `EXE_MULTU:   wdata_o = mulres_u[31:0];
-                 default:   wdata_o =`ZeroWord;
-               endcase
-            end     
+//        `EXE_RES_MUL: begin
+//            case(aluop_i)
+//                `EXE_MULT:    wdata_o = mulres[31:0];
+//                `EXE_MULTU:   wdata_o = mulres_u[31:0];
+//                 default:   wdata_o =`ZeroWord;
+//               endcase
+//            end     
         `EXE_RES_MOVE: begin
             wdata_o = moveres;
             case(aluop_i)
