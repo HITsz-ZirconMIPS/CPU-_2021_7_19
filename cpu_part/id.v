@@ -159,7 +159,8 @@ module id(
             break_exception = 1'b0;
 
         case(op)
-
+	     6'b101111:
+		
             `EXE_SPECIAL_INST:  begin
                 if(shamt == 5'b00000)begin
                     case(funct)
