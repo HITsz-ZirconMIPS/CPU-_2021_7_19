@@ -99,8 +99,11 @@ module cp0_reg(
         end else begin
             count0 <= ~count0;
             if(count0) count_o <= count_o +1;    //count_o+1
-            cause_o[15:10] <= int_i;
-            cause_o[30] <= timer_int_o;
+//             cause_o[15:10] <= int_i;
+//             cause_o[30] <= timer_int_o;
+	    //syy  9.14
+            cause_o[14:10] <= int_i[4:0];
+            cause_o[15] <= int_i[5] | cause_o[30];
             
             if(compare_o != `ZeroWord && count_o == compare_o)begin
                 timer_int_o <= `InterruptAssert;
