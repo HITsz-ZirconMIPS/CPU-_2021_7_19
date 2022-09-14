@@ -161,8 +161,10 @@ assign wid      = 4'b0001   ;
 wire[5:0] int;
 wire timer_int;
     
- assign int = {ext_int[5:1],timer_int}; //时钟中断输出作为�?个中断输�?   
-
+//  assign int = {ext_int[5:1],timer_int}; //时钟中断输出作为�?个中断输�?   
+//     9.14 syy
+assign int = ext_int;
+    
 //    wire [`InstAddrBus] inst_addr;  //虚地�?
     wire [`InstBus] inst1 ;
     wire [`InstBus] inst2 ;
