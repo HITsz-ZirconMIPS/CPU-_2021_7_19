@@ -28,7 +28,7 @@ module id(
     input[`RegBus]              reg1_data_i,
     input[`RegBus]              reg2_data_i,
     
-    //前递解决数据相关
+    //前�?�解决数据相�?
     input[`RegAddrBus]      ex_waddr1_i,
     input[`RegAddrBus]      ex_waddr2_i,
     input                                  ex_we1_i,
@@ -48,7 +48,7 @@ module id(
     input is_load1,   
     input is_load2,
 
-    output reg is_div,  //是否为除法指令
+    output reg is_div,  //是否为除法指�?
     output reg is_mul,
     output reg is_jb,
     output reg is_ls,
@@ -75,7 +75,8 @@ module id(
     output[31:0]            exception_type,
         
     output                  load_dependency ,
-    output reg[31:0]           bru_addr    
+    output reg[31:0]           bru_addr,
+    output reg              icache_flush      
     );
     
     
@@ -132,6 +133,7 @@ module id(
             syscall_exception = 1'b0;
             eret_exception = 1'b0;
             break_exception = 1'b0;
+            icache_flush = 1'b0;
 //            fliter_rst = 1'b0;            
         end else begin    
             aluop_o = `EXE_NOP_OP;
@@ -157,12 +159,19 @@ module id(
             syscall_exception = 1'b0;
             eret_exception = 1'b0;
             break_exception = 1'b0;
+            icache_flush = 1'b0;
 
         case(op)
-	     6'b101111: begin
-		 instvalid = `InstValid;  
-	     end		     
-		
+            
+            6'b101111: begin
+                instvalid = `InstValid;
+                icache_flush = 1'b0;
+                if(rt == 5'b00000 || rt == 5'b01000 || rt == 5'b10000) begin
+                    icache_flush = 1'b1;
+                end
+                   
+            end    
+
             `EXE_SPECIAL_INST:  begin
                 if(shamt == 5'b00000)begin
                     case(funct)
@@ -268,7 +277,7 @@ module id(
                                 instvalid = `InstValid;
                                 hilo_we = `ReadEnable;
                              end
-                    //条件移动 ID两自部件存在数据相关（双发射），不能在此立刻判断，先默认条件满足，在执行阶段进一步判断                          
+                    //条件移动 ID两自部件存在数据相关（双发射），不能在此立刻判断，先默认条件满足，在执行阶段进一步判�?                          
                             `EXE_MOVN: begin
                                 we_o = `WriteEnable;
                                 aluop_o = `EXE_MOVN_OP;
