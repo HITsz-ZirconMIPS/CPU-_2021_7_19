@@ -48,7 +48,8 @@ module mycpu(
         output[`InstAddrBus]    praddr_to_icache_o,
         output[`InstAddrBus]    vraddr_to_icache_o,
         
-        
+        output                  flush_to_icache_o,
+
         //Cache Pc Control
 
         input                   only_delayslot_inst_i,
@@ -83,9 +84,9 @@ module mycpu(
         
         //debug 信号
         output[`InstAddrBus]           commit_pc1, //写回级PC
-	    output[3:0]                         commit_rf_wen1,//写regfiles的写使能 1位要扩展成4位
-	    output[`RegAddrBus]            commit_rf_waddr1, //写regfiles的目的寄存器号
-	    output[`RegBus]                commit_rf_wdata1,  //写regfiles的数据
+	    output[3:0]                         commit_rf_wen1,//写regfiles的写使能 1位要扩展�?4�?
+	    output[`RegAddrBus]            commit_rf_waddr1, //写regfiles的目的寄存器�?
+	    output[`RegBus]                commit_rf_wdata1,  //写regfiles的数�?
 	    
 	    output[`InstAddrBus]           commit_pc2,
 	    output[3:0]                         commit_rf_wen2,
@@ -112,8 +113,10 @@ module mycpu(
 
     
     assign inst_uncache = rreq_to_icache && (vraddr_to_icache_o[31:29] == 3'b101) ? 1 : 0 ;
-    assign data_uncache_r = rreq_to_dcache && (raddr_to_dcache[31:29] == 3'b101) ? 1 : 0 ;
-    assign data_uncache_w = wreq_to_dcache && (waddr_to_dcache[31:29] == 3'b101) ? 1 : 0 ;
+    //assign data_uncache_r = rreq_to_dcache && (raddr_to_dcache[31:29] == 3'b101) ? 1 : 0 ;
+    //assign data_uncache_w = wreq_to_dcache && (waddr_to_dcache[31:29] == 3'b101) ? 1 : 0 ;
+    assign data_uncache_r = rreq_to_dcache;
+    assign data_uncache_w = wreq_to_dcache;
     assign data_uncache   = ~stallreq_from_dcache && (data_uncache_r || data_uncache_w) ; 
     
     
@@ -598,7 +601,8 @@ module mycpu(
         .stallreq_from_id(stallreq_from_id),
         .bpu_predict_info_o(id_bpu_predict_info_o),
         .bru_addr (bru_addr_id_o),
-        .is_jb_o(id_is_jb_o)
+        .is_jb_o(id_is_jb_o),
+        .icache_flush_o(flush_to_icache_o)
 
         );          
         
