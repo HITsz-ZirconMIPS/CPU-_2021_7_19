@@ -23,7 +23,7 @@ module ICache(
      // 
     input  wire              clk_g,
     input  wire              resetn,
-    // Cache与CPU流水线的交互接口
+    // Cache��CPU��ˮ�ߵĽ����ӿ�
     input  wire              flush,
     input  wire              I_UnCache,
     input  wire              pred_dly,
@@ -32,6 +32,7 @@ module ICache(
     input  wire [`TagBus]    ptag,
     input  wire [`TagBus]    vtag,
     input  wire [`OffsetBus] offset,
+    input  wire              clear,
     
     output wire              stallreq,
     output wire              only_delayslot_inst_o,
@@ -42,22 +43,17 @@ module ICache(
     output wire [`AddrBus]   inst0_addr,
     output wire [`AddrBus]   inst1_addr,
     
-    // Cache与AXI总线接口的交互接�?
+    // Cache��AXI���߽ӿڵĽ�����??
     
     output wire              rd_req,
     output wire [`TypeBus]   rd_type,
     output wire [`AddrBus]   rd_addr,
     input  wire              rd_finish,
-    input  wire [`LineBus]   rd_data,
-    
-    // 命中�?
-    output wire [`DataBus]   ICache_sum_req,
-    output wire [`DataBus]   ICache_sum_hit
+    input  wire [`LineBus]   rd_data
     
 );
-    // 命中�?
-    reg [`DataBus]     SUM_HIT;
-    reg [`DataBus]     SUM_REQ;
+    // ����??
+  
     
     
     parameter DLY = 0;
@@ -93,6 +89,12 @@ module ICache(
     
     reg  [`InstBus]  inst0_buffer;
     
+    // Valid 
+    reg [127:0] tag_valid1;
+    reg [127:0] tag_valid0;
+    reg [127:0] tag_valid2;
+    reg [127:0] tag_valid3;
+
     // FIFO
     reg [127:0] QUEUE [1:0];
     reg         QUEUE_buffer0;
@@ -200,7 +202,7 @@ module ICache(
     wire [`TagBus]   wtag;
     wire [`IndexBus] waddr;
     wire             dwea;
-    wire             wea; // tagv的字节选择信号
+    wire             wea; // tagv���ֽ�ѡ���ź�
     
     // Select Data and Judge Data
     
@@ -316,31 +318,41 @@ module ICache(
         .addrb(addrb),  // input wire [3 : 0] addrb
         .doutb(rtag_way3)  // output wire [20 : 0] doutb
     );
-    
-    // 命中�?
-    always@(posedge clk_g) begin
-      if(resetn == `RstEnable) begin
-        SUM_REQ  <= 32'b0;
-      end else if(cpu_req && !I_UnCache && !stallreq) begin
-        SUM_REQ  <= SUM_REQ + 1;
+   
+    // tag_valid
+    always@(posedge clk_g)begin
+      if(resetn == `RstEnable || flush == `RstEnable || clear == `RstEnable) begin
+        tag_valid0           <= #DLY 128'b0;
+        tag_valid1           <= #DLY 128'b0;
+        tag_valid2           <= #DLY 128'b0;
+        tag_valid3           <= #DLY 128'b0;
+      end else if(ena0) begin
+        tag_valid0[waddr]    <= #DLY 1'b1;
+        tag_valid1           <= #DLY tag_valid1;
+        tag_valid2           <= #DLY tag_valid2;
+        tag_valid3           <= #DLY tag_valid3;
+      end else if(ena1) begin
+        tag_valid1[waddr]    <= #DLY 1'b1;
+        tag_valid0           <= #DLY tag_valid0;
+        tag_valid2           <= #DLY tag_valid2;
+        tag_valid3           <= #DLY tag_valid3;
+      end else if(ena2) begin
+        tag_valid2[waddr]    <= #DLY 1'b1;
+        tag_valid0           <= #DLY tag_valid0;
+        tag_valid1           <= #DLY tag_valid1;
+        tag_valid3           <= #DLY tag_valid3;
+      end else if(ena3) begin
+        tag_valid3[waddr]    <= #DLY 1'b1;
+        tag_valid0           <= #DLY tag_valid0;
+        tag_valid1           <= #DLY tag_valid1;
+        tag_valid2           <= #DLY tag_valid2;
       end else begin
-        SUM_REQ  <= SUM_REQ;
+        tag_valid0           <= #DLY tag_valid0;
+        tag_valid1           <= #DLY tag_valid1;
+        tag_valid2           <= #DLY tag_valid2;
+        tag_valid3           <= #DLY tag_valid3;
       end
     end
-    
-    always@(posedge clk_g) begin
-      if(resetn == `RstEnable) begin
-        SUM_HIT  <= 32'b0;
-      end else if((cache_hit1 && buffer_offset1[3:2] == 2'b11) || (cache_hit0 && buffer_offset0[3:2] != 2'b11)) begin
-        SUM_HIT  <= SUM_HIT + 1;
-      end else begin
-        SUM_HIT  <= SUM_HIT;
-      end
-    end
-    
-    assign ICache_sum_req = SUM_REQ;
-    assign ICache_sum_hit = SUM_HIT;
-    
     
     // Register
     always@(posedge clk_g) begin
@@ -364,7 +376,7 @@ module ICache(
         inst1_vtag_buffer1   <= #DLY 20'b0;
         inst1_ptag_buffer1   <= #DLY 20'h0;
       end else if(current_mstate[1] || current_mstate[0] || I_UnCache) begin 
-      // 包含两种情况，主状�?�机处于MIDLE状�?�以及主状�?�机处于LOOKUP状�?�且下一周期的主状�?�机仍处于LOOKUP状�??
+      // ���������������״???������MIDLE״???�Լ���״???������LOOKUP״???����һ���ڵ���״???���Դ���LOOKUP״???
         buffer_preddly0      <= #DLY pred_dly;
         buffer_index0        <= #DLY index ;
         buffer_ptag0         <= #DLY ptag  ;
@@ -519,19 +531,19 @@ module ICache(
     
     // Cache_Hit
     
-    assign way0_hit0  = current_mstate[1] && rtag_way0[19:0] == buffer_ptag0 ;
-    assign way1_hit0  = current_mstate[1] && rtag_way1[19:0] == buffer_ptag0 ;
-    assign way2_hit0  = current_mstate[1] && rtag_way2[19:0] == buffer_ptag0 ;
-    assign way3_hit0  = current_mstate[1] && rtag_way3[19:0] == buffer_ptag0 ;
+    assign way0_hit0  = current_mstate[1] && rtag_way0[19:0] == buffer_ptag0 && tag_valid0[buffer_index0];
+    assign way1_hit0  = current_mstate[1] && rtag_way1[19:0] == buffer_ptag0 && tag_valid1[buffer_index0];
+    assign way2_hit0  = current_mstate[1] && rtag_way2[19:0] == buffer_ptag0 && tag_valid2[buffer_index0];
+    assign way3_hit0  = current_mstate[1] && rtag_way3[19:0] == buffer_ptag0 && tag_valid3[buffer_index0];
     assign cache_hit0 = way0_hit0 || way1_hit0 || way2_hit0 || way3_hit0;
-    assign way0_hit1  = (buffer_index1 != 7'b1111111) && current_mstate[3] ? rtag_way0[19:0] == buffer_ptag1 : 
-                        (buffer_index1 == 7'b1111111) && current_mstate[3] ? rtag_way0[19:0] == inst1_ptag_buffer1 :`HitFail;
-    assign way1_hit1  = (buffer_index1 != 7'b1111111) && current_mstate[3] ? rtag_way1[19:0] == buffer_ptag1 : 
-                        (buffer_index1 == 7'b1111111) && current_mstate[3] ? rtag_way1[19:0] == inst1_ptag_buffer1 :`HitFail;
-    assign way2_hit1  = (buffer_index1 != 7'b1111111) && current_mstate[3] ? rtag_way2[19:0] == buffer_ptag1 : 
-                        (buffer_index1 == 7'b1111111) && current_mstate[3] ? rtag_way2[19:0] == inst1_ptag_buffer1 :`HitFail;
-    assign way3_hit1  = (buffer_index1 != 7'b1111111) && current_mstate[3] ? rtag_way3[19:0] == buffer_ptag1 : 
-                        (buffer_index1 == 7'b1111111) && current_mstate[3] ? rtag_way3[19:0] == inst1_ptag_buffer1 :`HitFail;
+    assign way0_hit1  = (buffer_index1 != 7'b1111111) && current_mstate[3] ? rtag_way0[19:0] == buffer_ptag1       && tag_valid0[buffer_index1]: 
+                        (buffer_index1 == 7'b1111111) && current_mstate[3] ? rtag_way0[19:0] == inst1_ptag_buffer1 && tag_valid0[buffer_index1]:`HitFail;
+    assign way1_hit1  = (buffer_index1 != 7'b1111111) && current_mstate[3] ? rtag_way1[19:0] == buffer_ptag1       && tag_valid1[buffer_index1]: 
+                        (buffer_index1 == 7'b1111111) && current_mstate[3] ? rtag_way1[19:0] == inst1_ptag_buffer1 && tag_valid1[buffer_index1]:`HitFail;
+    assign way2_hit1  = (buffer_index1 != 7'b1111111) && current_mstate[3] ? rtag_way2[19:0] == buffer_ptag1       && tag_valid2[buffer_index1]: 
+                        (buffer_index1 == 7'b1111111) && current_mstate[3] ? rtag_way2[19:0] == inst1_ptag_buffer1 && tag_valid2[buffer_index1]:`HitFail;
+    assign way3_hit1  = (buffer_index1 != 7'b1111111) && current_mstate[3] ? rtag_way3[19:0] == buffer_ptag1       && tag_valid3[buffer_index1]: 
+                        (buffer_index1 == 7'b1111111) && current_mstate[3] ? rtag_way3[19:0] == inst1_ptag_buffer1 && tag_valid3[buffer_index1]:`HitFail;
     assign cache_hit1 = way0_hit1 || way1_hit1 || way2_hit1 || way3_hit1;
     
     // READ
@@ -615,7 +627,7 @@ module ICache(
                              buffer_offset[4:2] == 3'b101 ? rdata_way3_bank6 :
                              buffer_offset[4:2] == 3'b110 ? rdata_way3_bank7 :
                              32'b0;
-    // UNCache改了这里
+    // UNCache��������
     assign inst0_data = current_mstate[6]              ? rd_data[31:0]    :
                         (buffer_offset[4:2] == 3'b000) ? rd_data[31:0]    :
                         (buffer_offset[4:2] == 3'b001) ? rd_data[63:32]   :
@@ -691,7 +703,10 @@ module ICache(
     
     assign wtag  = (current_mstate[4] && buffer_index == 7'b1111111) ? inst1_ptag_buffer1 :
                    rd_finish  ? buffer_ptag : 21'b0;
-
+//    assign rd_addr  = (current_mstate[4] && buffer_index != 8'hff) ? {buffer_ptag,inst1_index_buffer,4'b0000} : 
+//                      (current_mstate[4] && buffer_index == 8'hff) ? {inst1_ptag_buffer1,inst1_index_buffer,4'b0000} :
+//                      (current_mstate[6]) ? {buffer_ptag0,buffer_index0,buffer_offset0} :
+//                      {buffer_ptag,buffer_index,4'b0000};
     assign waddr = (rd_finish && current_mstate[2]) ? buffer_index : 
                    (rd_finish && current_mstate[4]) ? inst1_index_buffer : 7'b0;
     assign dwea = rd_finish ? 1'b1 : 1'b0;
@@ -737,6 +752,7 @@ module ICache(
     assign inst1_addr  = (buffer_offset[4:2] == 3'b111 && inst1_index_buffer == 7'b0) ? {inst1_vtag_buffer,inst1_index_buffer,5'b0000} :
                          (buffer_offset[4:2] == 3'b111) ? {buffer_vtag,inst1_index_buffer,5'b0000} : 
                          {buffer_vtag,buffer_index,inst1_offset_buffer};
+    //assign stallreq = ~((current_mstate[0]) || (next_mstate[1]) || (current_mstate[1] && next_mstate[0]));
     assign stallreq = current_mstate[2] || current_mstate[3] || current_mstate[4] || 
                       current_mstate[5] || current_mstate[6] ||
                       (current_mstate[1] && !cache_hit0) || (current_mstate[1] && buffer_offset0[4] && buffer_offset0[3] && buffer_offset0[2]);
