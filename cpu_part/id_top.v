@@ -117,8 +117,12 @@
         output  reg                             issued_o,
         output wire[31:0]           bru_addr ,
         output                      is_jb_o,
-        output  reg                     stallreq_from_id
+        output  reg                     stallreq_from_id,
+        output                      icache_flush_o
     );
+    
+    wire                id_icache_flush_o1;
+    wire                id_icache_flush_o2;
     
     wire[`AluOpBus]     id_sub_2_aluop_o;
     wire[`AluSelBus]    id_sub_2_alusel_o;    
@@ -159,6 +163,7 @@
     assign is_in_delayslot2_o = (issue_o == `DualIssue)? id2_inst_in_delayslot:`NotInDelaySlot;
     assign load_dependency = (reg12_load_dependency == `LoadDependent || reg34_load_dependency == `LoadDependent) ? `LoadDependent : `LoadIndependent; 
     assign is_jb_o = is_jb1|(issue_o & lsmul_change) ;
+    assign icache_flush_o = id_icache_flush_o1 || id_icache_flush_o2;
     
     assign is_load1 =   (ex_aluop1_i == `EXE_LB_OP) ||
                       (ex_aluop1_i == `EXE_LBU_OP)||
@@ -233,7 +238,8 @@
         .exception_type(exception_type1),
         .imm_fnl_o(imm_ex1_o) ,     
         .bru_addr  (bru_addr),
-        .load_dependency(reg12_load_dependency)
+        .load_dependency(reg12_load_dependency),
+        .icache_flush(icache_flush_o1)
         );    
         
     id   u_id2(
@@ -283,7 +289,8 @@
         
         .exception_type(id_sub_2_exception_type),
         .imm_fnl_o(imm_ex2_o),
-        .load_dependency(reg34_load_dependency)
+        .load_dependency(reg34_load_dependency),
+        .icache_flush(icache_flush_o2)
         
         );
            
